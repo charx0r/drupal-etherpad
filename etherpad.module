@@ -304,21 +304,23 @@ function etherpad_generate_padid($domain) {
 
   $ch = curl_init();
 
-  // Kill any output from curl.
+ // Kill any output from curl.
+  curl_setopt($ch, CURLOPT_HEADER, 0);
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
   # parse cookies and follow all redirects
-  curl_setopt($ch, CURLOPT_COOKIEFILE, '/dev/null');
+  $cookie_file = sys_get_temp_dir() . '/cookie-curl.txt';
+  curl_setopt($ch, CURLOPT_COOKIEJAR, $cookie_file);
+  curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_file);
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+  # first, post to get a cookie
+  curl_setopt($ch, CURLOPT_URL, 'http://etherpad.com/' . urlencode($pad_id));
+  $result = curl_exec($ch);
 
   # next, post to actually create the etherpad
   curl_setopt($ch, CURLOPT_URL, $domain . '/ep/pad/create');
-  curl_setopt($ch, CURLOPT_POST, true);
-  curl_setopt($ch, CURLOPT_POSTFIELDS, 'padId=' . urlencode($pad_id));
-  $result = curl_exec($ch);
-
-  // Only used to have to POST once... for some reason we need to hit the site 3 times now...
-  curl_setopt($ch, CURLOPT_URL, $domain . '/ep/pad/create');
+  curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_file);
   curl_setopt($ch, CURLOPT_POST, true);
   curl_setopt($ch, CURLOPT_POSTFIELDS, 'padId=' . urlencode($pad_id));
   $result = curl_exec($ch);
