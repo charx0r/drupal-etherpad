@@ -29,7 +29,7 @@ function etherpad_field_settings($op, $field) {
       $form['etherpad_url'] = array(
         '#type' => 'textfield',
         '#title' => t('URL of Etherpad install'),
-        '#description' => t('Add the URL of the etherpad install you\'ll be using to host the etherpads. This can be either a <a href="http://etherpad.org/public-sites/">public site</a> or one you host yourself'),
+        '#description' => t('Add the URL of the etherpad install you\'ll be using to host the etherpads. This can be either a <a href="http://etherpad.org/public-sites/">public site</a> or one you host yourself. Be sure to include the trailing slash.'),
         '#default_value' => $field['etherpad_url'],
       );
       $form['attributes'] = array(
@@ -85,7 +85,6 @@ function etherpad_field_settings($op, $field) {
  * Implementation of hook_content_is_empty().
  */
 function etherpad_content_is_empty($item, $field) {
-  dpm($field, 'field in hook_content_is_empty');
   if (empty($field['etherpad_url'])) {
     return TRUE;
   }
@@ -104,8 +103,6 @@ function etherpad_field($op, &$node, $field, &$items, $teaser, $page) {
       }
       break;
     case 'presave':
-      dpm($field);
-      dpm($items);
 //      _etherpad_sanitize
       break;
   }
@@ -131,11 +128,6 @@ function etherpad_widget_info() {
  * Implementation of hook_widget().
  */
 function etherpad_widget(&$form, &$form_state, $field, $items, $delta = 0) {
-  dpm($form);
-  dpm($form_state);
-  dpm($field);
-  dpm($items);
-  dpm($delta);
   $element['etherpad_url'] = array(
     '#type' => 'value',
     '#value' => (isset($items[$delta]['etherpad_url']) && !empty($form['nid']['#value'])) ? $items[$delta]['etherpad_url'] : $field['etherpad_url'] . etherpad_generate_padid($field['etherpad_url']),
@@ -165,8 +157,6 @@ function etherpad_widget(&$form, &$form_state, $field, $items, $delta = 0) {
  * Implementation of hook_widget_settings(). 
  */
 function etherpad_widget_settings($op, $widget) {
-  dpm($op, 'op in widget_settings');
-  dpm($widget);
 
 }
 
@@ -188,9 +178,6 @@ function _etherpad_sanitize(&$item, $delta, &$field, &$node) {
   if (!is_array($item['attributes'])) {
     $item['attributes'] = unserialize($item['attributes']);
   }
-  dpm($item);
-dpm($item);
-dpm($node);
   // Add identifier for the etherpad html code
   $item['html-id'] = 'etherpad-' . $etherpad_count;
   $etherpad_count++;
@@ -242,12 +229,10 @@ function etherpad_field_formatter_info() {
  * Theme function for 'default' text field formatter.
  */
 function theme_etherpad_formatter_default($element) {
-  //dpm($element);
   // If no etherpad_url given display nothing.
   if (empty($element['#item']['etherpad_url'])) {
     return '';
   }
-  dpm("inside etherpad theme");
   // Display all
   return etherpad_etherpad($element['#item']['etherpad_url'], $element['#item']);
 }
