@@ -74,9 +74,9 @@ function etherpad_field_settings($op, $field) {
 
     case 'database columns':
       return array(
-        'etherpad_url' => array('type' => 'varchar', 'length' => 1024, 'not null' => TRUE,),
-        'etherpad_id' => array('type' => 'varchar', 'length' => 255, 'not null' => TRUE,),
-        'attributes' => array('type' => 'text', 'size' => 'medium', 'not null' => FALSE),
+        'etherpad_url' => array('type' => 'varchar', 'length' => 1024, 'not null' => FALSE,),
+        'etherpad_text' => array('type' => 'text', 'not null' => TRUE, 'size' => 'big'),
+        'attributes' => array('type' => 'text', 'size' => 'medium', 'not null' => FALSE),// Then add auto-generate etherpad function.
       );
   }
 }
@@ -117,9 +117,12 @@ function etherpad_field($op, &$node, $field, &$items, $teaser, $page) {
 function etherpad_widget_info() {
   return array(
     'etherpad' => array(
-      'label' => 'Etherpad',
+      'label' => t('Etherpad'),
       'field types' => array('etherpad'),
       'multiple values' => CONTENT_HANDLE_CORE,
+      'callbacks' => array(
+        'default value' => CONTENT_CALLBACK_DEFAULT,
+      ),
     ),
   );
 }
@@ -128,10 +131,33 @@ function etherpad_widget_info() {
  * Implementation of hook_widget().
  */
 function etherpad_widget(&$form, &$form_state, $field, $items, $delta = 0) {
-  $element = array(
-    '#type' => $field['widget']['type'],
-    '#default_value' => isset($items[$delta]) ? $items[$delta] : '',
+  dpm($form);
+  dpm($form_state);
+  dpm($field);
+  dpm($items);
+  dpm($delta);
+  $element['etherpad_url'] = array(
+    '#type' => 'value',
+    '#value' => (isset($items[$delta]['etherpad_url']) && !empty($form['nid']['#value'])) ? $items[$delta]['etherpad_url'] : $field['etherpad_url'] . etherpad_generate_padid($field['etherpad_url']),
   );
+  $element['etherpad_text'] = array(
+    '#type' => 'value',
+    '#value' => (isset($items[$delta]['etherpad_text']) && !empty($form['nid']['#value'])) ? $items[$delta]['etherpad_text'] : "default value for now until we have a function to generate one",
+  );
+  $element['attributes'] = array(
+    '#type' => 'value',
+    '#value' => (isset($items[$delta]['attributes']) && !empty($form['nid']['#value'])) ? $items[$delta]['attributes'] : serialize($field['attributes']),
+  );
+  // Used so that hook_field('validate') knows where to 
+  // flag an error in deeply nested forms.
+  if (empty($form['#parents'])) {
+    $form['#parents'] = array();
+  }
+  $element['_error_element'] = array(
+    '#type' => 'value',
+    '#value' => implode('][', array_merge($form['#parents'], array('value'))),
+  );
+
   return $element;
 }
 
@@ -158,18 +184,11 @@ function etherpad_widget_settings($op, $widget) {
  */
 function _etherpad_sanitize(&$item, $delta, &$field, &$node) {
   static $etherpad_count = 0; // unique ids for all etherpads on a page, on many-node-pages too
-
-  // Add attributes defined at the field level, if set.
-  if (is_array($field['attributes'])) {
-    foreach ($field['attributes'] as $attribute => $attbvalue) {
-      if (!empty($attbvalue) && $attbvalue != 'default' && $attbvalue != 'user' && !isset($attributes[$attribute])) {
-        $attributes[$attribute] = $attbvalue;
-      }
-    }
+  // Unserialize attributes
+  if (!is_array($item['attributes'])) {
+    $item['attributes'] = unserialize($item['attributes']);
   }
-  $item['attributes'] = $attributes;
-  $item['etherpad_url'] = $field['etherpad_url'];
-  $item['etherpad_id'] = "doof";
+  dpm($item);
 dpm($item);
 dpm($node);
   // Add identifier for the etherpad html code
@@ -204,48 +223,6 @@ function etherpad_theme() {
 function theme_etherpad($element) {
   //drupal_add_css(drupal_get_path('module', 'etherpad') .'/etherpad.css');
   return $element['#children'];
-}
-
-/**
- * Implementation of hook_elements().
- */
-function etherpad_elements() {
-  $elements = array();
-  $elements['etherpad'] =  array(
-    '#input' => TRUE,
-    '#process' => array('etherpad_process'),
-  );
-  return $elements;
-}
-
-/**
- * Process the etherpad type element before displaying the field.
- *
- * Build the form element. When creating a form using FAPI #process,
- * note that $element['#value'] is already set.
- *
- * The $fields array is in $form['#field_info'][$element['#field_name']].
- */
-function etherpad_process($element, $edit, $form_state, $form) {
-  dpm($element);
-  $field = $form['#field_info'][$element['#field_name']];
-  $defaults = $element['#value'];
-  $element['embed_etherpad'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Embed an etherpad in this page?'),
-    '#default_value' => TRUE,
-  );
-  $element['etherpad_url'] = array(
-    '#title' => t('Etherpad Install URL'),
-    '#type' => 'textfield',
-    '#default_value' => $defaults['etherpad_url'],
-    '#weight' => 3,
-  );
-//  $element['etherpad_url'] = array('#type' => 'value', '#value' => $field['etherpad_url']);
-  $element['#etherpad_id'] = "doof";
-  $element['attributes'] = array('#type' => 'value', '#value' => $field['attributes']);
-
-  return $element;
 }
 
 /**
@@ -306,7 +283,8 @@ function etherpad_etherpad($path, $options = FALSE) {
   if (!isset($options['attributes']['height'])) {
     $options['attributes']['height'] = '701';
   }
-$path = $path . "doof?_theme=nano"; // Randomly generate id, figure out why this doesn't want to work on book / polls. Fetch html, for teaser, show straight HTML
+  
+  $path = $path . "?_theme=nano"; // Randomly generate id, figure out why this doesn't want to work on book / polls. Fetch html, for teaser, show straight HTML
   $htmlid = '';
   if (isset($options['html-id']) && !empty($options['html-id'])) {
     $htmlid = ' id="' . $options['html-id'] . '" name="' . $options['html-id'] . '"';
@@ -314,5 +292,38 @@ $path = $path . "doof?_theme=nano"; // Randomly generate id, figure out why this
   return ('<iframe src="' . check_url(url($path, $options)) . '"' . drupal_attributes($options['attributes']) .
     $htmlid .
     '>' .
-     t('Your browser does not support iframes. But You can use the following link.') /*. ' ' . /*l('Link', url($path, $options), $options_link)*/ . '</iframe>');
+     t('Your browser does not support iframes. To reach the same content, visit ' . url($path, array('absolute' => TRUE)) . '</iframe>'));
+}
+
+function etherpad_generate_padid($domain) {
+  if (empty($domain)) {
+    return "Etherpad domain not set.";
+  }
+
+  $pad_id = sha1($domain . (mt_rand() * mt_rand()));
+
+  $ch = curl_init();
+
+  // Kill any output from curl.
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+
+  # parse cookies and follow all redirects
+  curl_setopt($ch, CURLOPT_COOKIEFILE, '/dev/null');
+  curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+  # next, post to actually create the etherpad
+  curl_setopt($ch, CURLOPT_URL, $domain . '/ep/pad/create');
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, 'padId=' . urlencode($pad_id));
+  $result = curl_exec($ch);
+
+  // Only used to have to POST once... for some reason we need to hit the site 3 times now...
+  curl_setopt($ch, CURLOPT_URL, $domain . '/ep/pad/create');
+  curl_setopt($ch, CURLOPT_POST, true);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, 'padId=' . urlencode($pad_id));
+  $result = curl_exec($ch);
+
+  curl_close($ch);
+
+  return $pad_id;
 }
